@@ -5,7 +5,6 @@ import MHDCoordSys
 from scipy.spatial.transform import Rotation as R
 
 verbose = 0
-verbose = 0
 def log(input):
     if verbose:
         print(input)
@@ -51,6 +50,7 @@ class MHDRectPM:
         self.zMax = 1e5
 
         self.cs = csIn
+        self.altCS = 0
 
         self.orientationType = 1
 
@@ -66,7 +66,6 @@ class MHDRectPM:
         gOut = math.log(numerator / denominator)
 
         return gOut
-
     def phiP(self,p1,p2,p3,zP0):
         numerator = p1 * (p3 - zP0)
         denominator = p2 * math.sqrt(p1 * p1 + p2 * p2 + (p3 - zP0) * (p3 - zP0))
@@ -81,7 +80,6 @@ class MHDRectPM:
         BxP0 = self.gammaP(self.a - xP, yP, zP, 0.0) + self.gammaP(self.a - xP, self.b - yP, zP, 0.0) - self.gammaP(xP, yP, zP, 0.0) - self.gammaP(xP, self.b - yP, zP, 0.0)
         BxPout = - self.K / 2.0 * (BxPH - BxP0)
         return BxPout
-
     def ByP(self,xP,yP,zP):
         ByPH = self.gammaP(self.b - yP,xP,zP,self.h)
         ByPH+= self.gammaP(self.b - yP,self.a - xP,zP,self.h)
@@ -95,7 +93,6 @@ class MHDRectPM:
 
         ByPout = - self.K / 2.0 * (ByPH - ByP0)
         return ByPout
-
     def BzP(self,xP,yP,zP):
         BzPH = self.phiP(yP,self.a - xP,zP,self.h)          
         BzPH+=self.phiP(self.b - yP,self.a - xP,zP,self.h)
@@ -161,11 +158,10 @@ class MHDRectPM:
         jac = numpy.array([[P_BxP_P_xP, P_BxP_P_yP, P_BxP_P_zP],[P_ByP_P_xP, P_ByP_P_yP, P_ByP_P_zP],[P_BzP_P_xP, P_BzP_P_yP, P_BzP_P_zP]])
 
         return jac
-
     def updatePosition(self,Bx,By,Bz,guessX,guessY,guessZ):
-        guessXP = guessX#*-1.0
-        guessYP = guessY#*-1.0
-        guessZP = guessZ
+        guessXP = self.getXP(guessX, guessY, guessZ)
+        guessYP = self.getYP(guessX, guessY, guessZ)
+        guessZP = self.getZP(guessX, guessY, guessZ)
         posPrime = numpy.array([[guessXP], [guessYP], [guessZP]], numpy.double)
 
         #Bx *= -1.0
@@ -188,14 +184,14 @@ class MHDRectPM:
 
         trialPos = 0
         validPosFlag = 0
-        errorThreshold = 0.000001
+        errorThreshold = 1e-7
 
         log('begin nonlinear equation solve')
 
         while (trialPos<=10000):
             log('trialPos loop begin:%i'%trialPos)
             iterations = 0
-            while iterations<10:
+            while iterations<100:
                 log('iterations loop begin:%i'%iterations)
 
                 # If pos > 4m away from sensor, guess new poss
@@ -246,14 +242,16 @@ class MHDRectPM:
                 iterations+=1
             #proceed
             log('validPosFlag:%i'%validPosFlag)
+            if self.getZ(guessXP, guessYP, guessZP)<0:
+                validPosFlag = 0
             if validPosFlag == 1:
                 guessXP = posPrime[0,0]
                 guessYP = posPrime[1,0]
                 guessZP = posPrime[2,0]
 
-                self.x = guessXP
-                self.y = guessYP
-                self.z = guessZP
+                self.x = self.getX(guessXP, guessYP, guessZP)
+                self.y = self.getY(guessXP, guessYP, guessZP)
+                self.z = self.getZ(guessXP, guessYP, guessZP)
 
                 self.posVect = numpy.array([[self.x],[self.y],[self.z]],numpy.double)
                 break                                           #break trialpos loop
@@ -271,12 +269,167 @@ class MHDRectPM:
         else:
             return [self.x,self.y,self.z]
 
-    def getBP(self,xyzIn):
-        bPMag = numpy.array([self.BxP(xyzIn[0],xyzIn[1],xyzIn[2]),self.ByP(xyzIn[0],xyzIn[1],xyzIn[2]),self.BzP(xyzIn[0],xyzIn[1],xyzIn[2])], numpy.double)
-        return bPMag
+    def getXP(self,x,y,z):
+        return x + self.a / 2.0
+    def getYP(self,x,y,z):
+        return y + self.b / 2.0
+    def getZP(self,x,y,z):
+        return z + self.h / 2.0
+
+    def getX(self,xP,yP,zZ):
+        return xP - self.a / 2.0
+    def getY(self,xP,yP,zP):
+        return yP - self.b / 2.0
+    def getZ(self,xP,yP,zP):
+        return zP - self.h / 2.0
+
+    def getB(self,xyzIn):
+        xP = self.getXP(xyzIn[0], xyzIn[1], xyzIn[2])
+        yP = self.getYP(xyzIn[0], xyzIn[1], xyzIn[2])
+        zP = self.getZP(xyzIn[0], xyzIn[1], xyzIn[2])
+
+        bMag = numpy.array([self.BxP(xP,yP,zP),self.ByP(xP,yP,zP),self.BzP(xP,yP,zP)], numpy.double)
+        return bMag
+
+    def getR(self,BxyzIn,pGXYZIn=0):
+        if not pGXYZIn:
+            pGXYZIn = [self.x,self.y,self.z]
+        return self.updatePosition(BxyzIn[0],BxyzIn[1],BxyzIn[2],pGXYZIn[0],pGXYZIn[1],pGXYZIn[2])
+
+    def setJandKForBr(self,Br):
+
+        self.J = 1.0
+        self.K = self.muZero * self.J / (4.0 * 3.1415926535)
+        z = self.h*4.0
+        BZCalc1 = self.bZ_zAxis_alt(Br, z, self.a, self.b, self.h)
+        BZCalc2 = self.BzP(self.a / 2, self.b / 2, self.h / 2 + z)
+        correctionFactor = BZCalc1/BZCalc2
+        self.J*=correctionFactor
+        self.K = self.muZero * self.J / (4.0 * 3.1415926535)
+        print('updatedJ:%s'%self.J)
+
+    ### Validation methods
+
+    def bZ_zAxis_alt(self,Br,z,L,W,D):
+        t1 = math.atan(L*W/(2*z*math.sqrt(4*z**2+L**2+W**2)))
+        t2 = math.atan(L*W/(2*(D+z)*math.sqrt(4*(D+z)**2+L**2+W**2)))
+        B = Br/3.14159265354 * (t1-t2)
+        return B
+    def validateBZ_zAxis(self):
+        import matplotlib.pyplot as plt
+        # from p28 of https://www.andrews.edu/cas/physics/research/research_files/coilmag01.pdf:
+        # A 0.5" x 4" x 6" ceramic magnet, B field (Teslas) measured against Z-Axis (m)
+        datZ = '''0.007065217391304356, 0.03423670668953688
+        0.0161231884057971, 0.02476843910806175
+        0.026086956521739132, 0.019897084048027446
+        0.03605072463768115, 0.016397941680960565
+        0.04601449275362322, 0.013584905660377365
+        0.05597826086956524, 0.011114922813036034
+        0.06594202898550727, 0.009056603773584922
+        0.07590579710144929, 0.0074099485420240085
+        0.08586956521739131, 0.005969125214408233
+        0.09583333333333333, 0.00493996569468267
+        0.10597826086956524, 0.0040480274442538655
+        0.11594202898550723, 0.0032933104631218055
+        0.12590579710144928, 0.0027444253859348344
+        0.13586956521739135, 0.0023327615780446218
+        0.14583333333333334, 0.0019897084048027605
+        0.1557971014492753, 0.0017152658662092646
+        0.16576086956521746, 0.0014408233276157825
+        0.17572463768115942, 0.0013036020583190588
+        0.18568840579710144, 0.0010977701543739282
+        '''
+
+        aOld = self.a
+        bOld = self.b
+        hOld = self.h
+        jOld = self.J
+        self.a = 4*.0254#0.048
+        self.b = 6*.0254#0.022
+        self.h = 0.5*.0254#0.011
+
+        #test set J and K
+        self.setJandKForBr(0.31)
+        print('should be ~2.15E5')
+
+
+        #self.J = 2.15e5
+        #self.K = self.muZero * self.J / (4.0 * 3.1415926535)
+
+
+        zs = []
+        bZs = []
+        for line in datZ.split('\n'):
+            try:
+                zs.append(float(line.split(',')[0]))
+                bZs.append(float(line.split(',')[1]))
+            except:
+                pass
+
+        #mag params
+        Br = 0.3
+        bzCalcs1 = []
+        bzCalcs2 = []
+        for i in range(0,len(bZs),1):
+            x = zs[i]
+            yReal = bZs[i]
+            yCalc1 = self.bZ_zAxis_alt(Br,x,self.a,self.b,self.h)
+            bzCalcs1.append(yCalc1)
+            yCalc2 = self.BzP(self.a/2,self.b/2,self.h/2+x)
+            bzCalcs2.append(yCalc2)
+            print('x:%s meas:%s calc1:%s calc2:%s'%(x,yReal,yCalc1,yCalc2))
+
+        plt.clf()
+        plt.figure(1)
+        plt.plot(zs,bZs,label='MeasBZ')
+        #plt.plot(xs,yCalcs1,label='Calc1')
+        plt.plot(zs, bzCalcs1, label='Calc_analytic_BZ')
+        plt.plot(zs, bzCalcs2, label='Calc_Gou-et-al_BZ')
+
+        plt.legend()
+        plt.show()
+
+        print('position fix test')
+        posZCalcs = []
+        for i in range(0,len(bZs),1):
+            z = zs[i]
+            bX = 0
+            bY = 0
+            bZ = bZs[i]
+
+            xG = .4
+            yG = .2
+            zG = .4
+            self.x = xG
+            self.y = yG
+            self.z = zG
+
+            posCalc = self.updatePosition(bX,bY,bZ,self.x,self.y,self.z)
+            print('z:%s  zCalc:%s  yCalc:%s   xCalc:%s'%(z, posCalc[2],posCalc[1],posCalc[0]))
+            posZCalcs.append(posCalc[2])
+
+
+        plt.clf()
+        plt.figure(1)
+
+        #plt.plot(xs,yCalcs1,label='Calc1')
+        plt.plot(bZs,zs, label='z_exp')
+        plt.plot(bZs,posZCalcs, label='z_calc')
+        plt.xscale('log')
+        plt.legend()
+        plt.show()
+
+
+        self.a = aOld
+        self.b = bOld
+        self.h = hOld
+        self.j = jOld
+        self.K = self.muZero * self.J / (4.0 * 3.1415926535)
 
 #Test
-if 1 == 0:
+tests = [0]
+
+if 1 in tests:
     #standard home depot magnet used
     #zP = -x
     #xP = -y
@@ -343,7 +496,9 @@ if 1 == 0:
 
         #print(testMag.BzP(0.0,0.0))
 
-
+if 2 in tests:
+    tMag2 = MHDRectPM(0,1,1,1,1)
+    tMag2.validateBZ_zAxis()
 
 
 
