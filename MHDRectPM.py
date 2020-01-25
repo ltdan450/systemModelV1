@@ -306,7 +306,7 @@ class MHDRectPM:
         correctionFactor = BZCalc1/BZCalc2
         self.J*=correctionFactor
         self.K = self.muZero * self.J / (4.0 * 3.1415926535)
-        print('updatedJ:%s'%self.J)
+        #print('updatedJ:%s'%self.J)
 
     ### Validation methods
 

@@ -12,6 +12,9 @@ def plotPSD(xs=[],ys=[]):
     fSamp = 1.0/dtAvg
     sig = ys
     s = sig
+
+
+
     fft = np.fft.fft(s)
     T = dtAvg  # sampling interval
     N = len(s)

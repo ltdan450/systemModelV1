@@ -5,6 +5,7 @@ import MHDRectPM
 import math
 import numpy
 from scipy.spatial.transform import Rotation as R
+from scipy import signal
 import matplotlib.pyplot as plt
 
 class MHDSystemA:
@@ -16,89 +17,57 @@ class MHDSystemA:
         self.magnetometers=[]
         self.magnet = 0
 
-        print ('need to setup self.magnetModel in MHDSystem')
+        self.mgtr1 = 0
+        self.mgtr2 = 0
+        self.tMeasLast = -10000.0
+        self.measInterval = .010
+
+        self.xsOut = []
+        self.ysOut = []
+
+        #print ('need to setup self.magnetModel in MHDSystem')
 
     def addMagnet(self,magnet):
         self.magnet = magnet
 
     def addMagnetometer(self,mgtr):
         self.magnetometers.append(mgtr)
+        mgtr.mag = MHDRectPM.MHDRectPM(0,self.magnet.a,self.magnet.b,self.magnet.h,self.magnet.J)
+
+
+
+
 
     def step(self,t):
-        print('system t:%s'%t)
+        #print('system t:%s'%t)
+        mgtr1 = self.magnetometers[0]
+        mgtr2 = self.magnetometers[1]
+        if (t-self.tMeasLast)>self.measInterval:
+            self.tMeasLast = t
+            mgtr1B = mgtr1.measure()
+            mgtr1R = mgtr1.mag.getR(mgtr1B)
+            #print('mgtr1R:%s'%(mgtr1R))
 
-        oValid = False
-        oIterations = 0
-        oError = 10.0
-        oErrorThresh = 0.001
-
-        #while(oError>oErrorThresh):
-
-        xs = []
-        ys = []
-
-        varMin = 0
-        varMax = varMin * 1 + 0
-        dVar = 1
-        var = varMin
-        while var<=varMax:
-
-            #print('o iterations:%s'%oIterations)
-            modCS = MHDCoordSys.MHDCoordSys(0,0,0,var*1,var*1,var*1,self.cs)
-            for mgtr in self.magnetometers:
-                mgtr.altCS = modCS
-                bMeasMgtr = mgtr.measure()      #what mgtr measures in its own coordinate system
-                rMgtr = R.from_euler(mgtr.cs.rot, [mgtr.cs.thetaX, mgtr.cs.thetaY, mgtr.cs.thetaZ], degrees=True)
-                bMeasSys = rMgtr.apply(bMeasMgtr)
-                rMag = R.from_euler(self.magnet.cs.rot, [self.magnet.cs.thetaX, self.magnet.cs.thetaY, self.magnet.cs.thetaZ], degrees=True)
-                rMagInv = rMag.inv()
-                bMeasMag = rMagInv.apply(bMeasSys)
-                #print('bMeasMag:%s'%bMeasMag)
-                mag2mgtrPosMag = self.magnet.updatePosition(bMeasMag[0],bMeasMag[1],bMeasMag[2],self.magnet.cs.x,self.magnet.cs.y,self.magnet.cs.z)
-                mgtr.mag2mgtrPos = mag2mgtrPosMag
-                #Below is vector pointing from magnetCS to magnetometerCS in
-                mag2sysSys = rMag.apply(numpy.array([mag2mgtrPosMag[0],mag2mgtrPosMag[1],mag2mgtrPosMag[2]],numpy.double)) + [mgtr.cs.x,mgtr.cs.y,mgtr.cs.z]
-
-                print('mag2sysSys:%s'%mag2sysSys)
+            mgtr2B = mgtr2.measure()
+            mgtr2R = mgtr2.mag.getR(mgtr2B)
+            #print('mgtr2R:%s'%(mgtr2R))
+            self.xsOut.append(t)
+            self.ysOut.append(mgtr1R[2])
 
 
-            orientationError = 0
-            for mgtr in self.magnetometers:
-                mgtrActualPos = [mgtr.cs.x,mgtr.cs.y,mgtr.cs.z]
-                for otherMgtr in self.magnetometers:
-                    if otherMgtr != mgtr:
-                        otherMgtrActualPos = [otherMgtr.cs.x, otherMgtr.cs.y, otherMgtr.cs.z]
-                        actualDistance = [mgtrActualPos[0]-otherMgtrActualPos[0],mgtrActualPos[1]-otherMgtrActualPos[1],mgtrActualPos[2]-otherMgtrActualPos[2]]
 
-                        measuredDistance = [-mgtr.mag2mgtrPos[0] + otherMgtr.mag2mgtrPos[0],
-                                          -mgtr.mag2mgtrPos[1] + otherMgtr.mag2mgtrPos[1],
-                                          -mgtr.mag2mgtrPos[2] + otherMgtr.mag2mgtrPos[2]]
+            #mag2B = mag2.measure()
 
-                        errorDistance = [actualDistance[0]-measuredDistance[0],actualDistance[1]-measuredDistance[1],actualDistance[2]-measuredDistance[2]]
 
-                        #print('actualDistance: %s'%actualDistance)
-                        #print('measuredDistance: %s'%measuredDistance)
-                        #print('errorDistance: %s'%errorDistance)
-                        orientationError+=math.sqrt(errorDistance[0]**2+errorDistance[1]**2+errorDistance[2]**2)
 
-            print ('orientationError:%s'%orientationError)
-            output = orientationError
-            xs.append(var)
-            ys.append(output)
-            var += dVar
 
-        #print(xs)
-        #print(ys)
-        plt.figure(1)
+    def testEnd(self):
         plt.clf()
-        plt.plot(xs,ys)
-        #plt.show()
+        plt.figure(1)
+        plt.plot(self.xsOut,self.ysOut)
+        plt.show()
 
 
-
-
-
-            #print('Bmeas:%s'%Bmeas)
 
     def test2(self):
         a = 4*.0254#0.048
@@ -485,7 +454,7 @@ class MHDSystemA:
 
 
 
-tests = [4]
+tests = [0]
 
 if 2 in tests:
     sys = MHDSystemA(0,0)
