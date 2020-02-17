@@ -4,9 +4,35 @@ import MHDSystem
 import MHDMagnetometer
 import numpy
 import math
-#import scipy
+import scipy.signal as signal
 from scipy.spatial.transform import Rotation as R
+import globalConstants as c
 
+def log(toLog):
+    verbose = False
+    if verbose:
+        print(toLog)
+
+def sosfilt_zi(sos):
+    """Compute an initial state `zi` for the sosfilt function"""
+    from scipy.signal import lfilter_zi
+    sos = numpy.asarray(sos)
+    if sos.ndim != 2 or sos.shape[1] != 6:
+        raise ValueError('sos must be shape (n_sections, 6)')
+
+    n_sections = sos.shape[0]
+    zi = numpy.empty((n_sections, 2))
+    scale = 1.0
+    for section in range(n_sections):
+        b = sos[section, :3]
+        a = sos[section, 3:]
+        zi[section] = scale * lfilter_zi(b, a)
+        # If H(z) = B(z)/A(z) is this section's transfer function, then
+        # b.sum()/a.sum() is H(1), the gain at omega=0.  That's the steady
+        # state value of this section's step response.
+        scale *= b.sum() / a.sum()
+
+    return zi
 
 class MHDUniverse:
 
@@ -27,6 +53,7 @@ class MHDUniverse:
 
     def getBFieldForMgtr(self,mgtr):
         #print('getBFieldForMgtr')
+        #print('\n')
         bMgtrSum = numpy.array([0.0, 0.0, 0.0], numpy.double)
         for mag in self.magnets:
             #print('eval mag:%s'%mag)
@@ -34,53 +61,74 @@ class MHDUniverse:
             #aMgtr = numpy.array([mgtr.cs.x,mgtr.cs.y,mgtr.cs.z],numpy.double)
             #rMgtr = R.from_euler(mgtr.cs.rot, [mgtr.cs.thetaX, mgtr.cs.thetaY, mgtr.cs.thetaZ], degrees=True)
             aSys = numpy.array([mgtr.cs.x,mgtr.cs.y,mgtr.cs.z],numpy.double)
-            rSys = R.from_euler(sys.cs.rot, [sys.cs.thetaX, sys.cs.thetaY, sys.cs.thetaZ], degrees=True)
-            aUniv = rSys.apply(aSys)
+            rotSys = R.from_euler(sys.cs.rot, [sys.cs.thetaX, sys.cs.thetaY, sys.cs.thetaZ], degrees=True)
+            aUniv = rotSys.apply(aSys)
             eSys = numpy.array([sys.cs.x,sys.cs.y,sys.cs.z],numpy.double)
-            eUniv = rSys.apply(eSys)
+            eUniv = rotSys.apply(eSys)
             cUniv = eUniv + aUniv
+            #log('rMag = %s'%)
 
             #dMag = numpy.array([mag.cs.x, mag.cs.y, mag.cs.z], numpy.double)
-            rMag = R.from_euler(mag.cs.rot, [mag.cs.thetaX, mag.cs.thetaY, mag.cs.thetaZ], degrees=True)
+            rotMag = R.from_euler(mag.cs.rot, [mag.cs.thetaX, mag.cs.thetaY, mag.cs.thetaZ], degrees=True)
 
             dUniv = numpy.array([mag.cs.x, mag.cs.y, mag.cs.z], numpy.double)
-            fUniv = dUniv - cUniv
+            fUniv = cUniv - dUniv
 
-            rInvMag = rMag.inv()
+            rInvMag = rotMag.inv()
             fMag = rInvMag.apply(fUniv)
-            #print('fmag:%s'%fMag)
+
+            log('f_univ:%s \nf_mag:%s'%(fUniv,fMag))
 
             #need to get b field now from fMag
             bMag = mag.getB(fMag)
-            bUniv = rMag.apply(bMag)
-            rSysInv = rSys.inv()
+            bUniv = rotMag.apply(bMag)
+            rSysInv = rotSys.inv()
             bSys = rSysInv.apply(bUniv)
 
             rMgtr = R.from_euler(mgtr.cs.rot, [mgtr.cs.thetaX, mgtr.cs.thetaY, mgtr.cs.thetaZ], degrees=True)
             rMgtrInv = rMgtr.inv()
             bMgtr = rMgtrInv.apply(bSys)
+            log('b_mag:%s \nb_mgtr:%s'%(bMag,bMgtr))
             bMgtrSum+= bMgtr
 
         return bMgtrSum
 
     def run(self):
         t = 0
+        rateErrors = []
+        ampErrors = []
+
         while t<=self.tMax:
+            #print('t:%s'%(t))
             #update positions
 
             mag = .002
-            f = 0.5
+            f = .5
+            tGrace = 20
 
-            self.mainMag.cs.z = -.3 + mag * math.sin(f*t*2*math.pi)
-
+            self.mainMag.cs.z = -.3 + 1* mag * math.sin(f*t*2*math.pi) + 0* .2* mag * math.sin(20*t*2*math.pi)
+            #self.mainMag.cs.thetaY = 0 + 1 * math.sin(f * t * 2 * math.pi)
+            #print('ty:%s'%(self.mainMag.cs.thetaY))
             #update system
             for system in self.systems:
-                system.step(t)
+                res = system.step(t)
+                if res:
+                    rate,amp = res
+                    if t>tGrace:
+                        rateErrors.append(abs(f-rate))
+                        ampErrors.append(abs(amp - (2*mag)))
+
             t+=self.dt
         for system in self.systems:
             system.testEnd()
+        avgRateError = sum(rateErrors)/len(rateErrors)
+        avgAmpError = sum(ampErrors) / len(ampErrors)
+        print('avgRateError:%s avgAmpError:%s'%(avgRateError,avgAmpError))
 
-if 1 == 1:
+
+tests = c.tests
+
+if 3 in tests:
     for i1 in range(0,1,1):
         #setup universe
         u = MHDUniverse(.001,10)
@@ -89,36 +137,25 @@ if 1 == 1:
         a = 1.2*.0254#0.048
         b = 0.6*.0254#0.022
         h = 0.1875*.0254#0.011
-
-
-
-
-        magCS = MHDCoordSys.MHDCoordSys(0.0, -0.05, -0.3, 0, 10, 0, u.cs)
+        magCS = MHDCoordSys.MHDCoordSys(0.0, -0.00, -0.3, 0, -0, 90, u.cs)
         mag = MHDRectPM.MHDRectPM(magCS,a, b, h, 1.0)
         mag.setJandKForBr(1.31)
         u.addMagnet(mag)
         u.mainMag = mag
 
         #setup system
+        mgtrs = [[0,0,0,0],[0.05,0,0,0],[-0.03,.01,0,0]]
+
         csSys1 = MHDCoordSys.MHDCoordSys(.0, .0, .0, .0, 00.0, 0.0, u.cs)
         sys1 = MHDSystem.MHDSystemA(csSys1, u)
         sys1.magnet=mag
         u.addSystem(sys1)
 
         #setup magnetometers
-        mgtr1CS = MHDCoordSys.MHDCoordSys(.0, .0, 0.0, 0.0, 0.0, 0.0, sys1.cs)
-        mgtr1 = MHDMagnetometer.MHDMagnetometer(mgtr1CS, sys1)
-        mgtr1.altCS = MHDCoordSys.MHDCoordSys(0,0,0,0,0,0,0)
-        #sys1.magnetometers.append(mgtr1)
-        sys1.addMagnetometer(mgtr1)
-
-        mgtr2CS = MHDCoordSys.MHDCoordSys(0.0200, .0, -.0, 0.0, 0.0, 0.0, sys1.cs)
-        mgtr2 = MHDMagnetometer.MHDMagnetometer(mgtr2CS, sys1)
-        sys1.addMagnetometer(mgtr2)
-
-        #print('magtr1:%s'%(mgtr1.getBMeasurementFromUniverse()))
-        #print('measure1:%s' % (mgtr1.measure()))
-
+        paramset = [{'noiseTesla': 1.0e-22, 'sensitivityTesla': 1.0e-22}]
+        for mgtr in mgtrs:
+            mgtrCS = MHDCoordSys.MHDCoordSys(mgtr[0],mgtr[1],mgtr[2],0,0,0,sys1.cs)
+            sys1.addMagnetometer(MHDMagnetometer.MHDMagnetometer(mgtrCS,sys1,paramset[mgtr[3]]))
 
         if 1 == 1:
             #test magnet
@@ -133,13 +170,77 @@ if 1 == 1:
             dx = .2
             var = -1 + dx * i1
             #print('var:%s'%var)
-            vMagCS = MHDCoordSys.MHDCoordSys(.0, .0, -0.270, 0.0, 0.0, 0.0, sys1.cs)
+            vMagCS = MHDCoordSys.MHDCoordSys(.0, .0, -0.270, 10.0, 10.0, 0.0, sys1.cs)
             vMag = MHDRectPM.MHDRectPM(vMagCS, a, b, h, 1.25e11*1)
             vMag.verbose = 1
             sys1.addMagnet(vMag)
 
             u.run()
 
+if -4 in tests:
+    u = MHDUniverse(.001, 30.0)
+
+    # setup magnets
+    a = c.a #1.2 * .0254  # 0.048
+    b = c.b #0.6 * .0254  # 0.022
+    h = c.h #0.1875 * .0254  # 0.011
+    magCS = MHDCoordSys.MHDCoordSys(c.xRm, c.yRm, c.zRm, c.tXRm, c.tYRm, c.tZRm, u.cs)
+    mag = MHDRectPM.MHDRectPM(magCS, a, b, h, 1.0)
+    mag.setJandKForBr(c.Br)
+    u.addMagnet(mag)
+    u.mainMag = mag
+
+    # setup system
+    mgtrs = [[c.x1, c.y1, c.z1, 0], [c.x2, c.y2, c.z2, 0], [.04, c.y2/2, .06, 0]]
+    csSys1 = MHDCoordSys.MHDCoordSys(.0, .0, .0, .0, 00.0, 0.0, u.cs)
+    sys1 = MHDSystem.MHDSystemA(csSys1, u)
+    sys1.magnet = mag
+    u.addSystem(sys1)
+
+    sys1.measInterval = 0.05
+
+    #
+
+    #system high pass filter
+    if 1 == 1:
+        bpmThresh = 10
+        fThresh = bpmThresh / 60.0
+        fHigh = 2. / 60.
+        fLow = 1. / 60.
+        ord = 1
+        fNyq = 0.5 * 1.0 / sys1.measInterval
+        print('fH:%s fL:%s nyq:%s' % (fThresh, fLow, fNyq))
+        b, a = signal.butter(ord, [fThresh / fNyq], btype='highpass')
+        sys1.posFilt = [b, a]
+        sys1.filtType='FIR'
+
+    #system low pass filter
+    if 1 == 1:
+        bpmThresh = 200
+        fThresh = bpmThresh / 60.0
+        ord = 4
+        fNyq = 0.5 * 1.0 / sys1.measInterval
+        #print('fH:%s fL:%s nyq:%s' % (fThresh, fLow, fNyq))
+        b, a = signal.butter(ord, [fThresh / fNyq], btype='lowpass')
+        lowpassFilt = [b, a]
+        #sys1.filtType='FIR'
+
+
+    # setup magnetometers
+    paramset = [{'noiseTesla': 1.0e-22, 'sensitivityTesla': 1.0e-22}]
+    for mgtr in mgtrs:
+        mgtrCS = MHDCoordSys.MHDCoordSys(mgtr[0], mgtr[1], mgtr[2], 0, 0, 0, sys1.cs)
+        newMgtr = MHDMagnetometer.MHDMagnetometer(mgtrCS, sys1, paramset[mgtr[3]])
+        sys1.addMagnetometer(newMgtr)
+        newMgtr.a = a
+        newMgtr.b = b
+        if 1 == 1:
+            newMgtr.zX = signal.lfilter_zi(newMgtr.b, newMgtr.a)
+            newMgtr.zY = signal.lfilter_zi(newMgtr.b, newMgtr.a)
+            newMgtr.zZ = signal.lfilter_zi(newMgtr.b, newMgtr.a)
+
+
+    u.run()
 
 #just magnets and magnetometers
 if 1 == 0:

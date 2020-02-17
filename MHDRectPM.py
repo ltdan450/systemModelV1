@@ -184,7 +184,7 @@ class MHDRectPM:
 
         trialPos = 0
         validPosFlag = 0
-        errorThreshold = 1e-7
+        errorThreshold = 1e-9
 
         log('begin nonlinear equation solve')
 
@@ -229,7 +229,7 @@ class MHDRectPM:
                 log('BxP:%s ByP:%s BzP:%s' % (Bx, By, Bz))
                 objFunction = numpy.array([[BxPG - Bx], [ByPG - By], [BzPG - Bz]], numpy.double)
                 BPErrorNorm = numpy.linalg.norm(objFunction)
-                log('error norm:%f'%BPErrorNorm)
+                log('error norm:%f'%(BPErrorNorm))
 
                 x = posPrime[0, 0]
                 y = posPrime[1, 0]
@@ -508,5 +508,4 @@ if 2 in tests:
 #scratch secion
 if 1 == 0:
     arr = numpy.array([[1.0],[2.0],[1.5]],numpy.double)
-
     print(arr)
