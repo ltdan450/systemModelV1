@@ -77,6 +77,7 @@ class MHDSystemA:
             rHist = self.updateRHist(Rsys_sysCS)
             results = self.getBreathRate(rHist)
             #print('t:%s res:%s'%(t,results) )
+            #self.ysOut.append(b[2])
             return results
         else:
             return 0
@@ -143,6 +144,7 @@ class MHDSystemA:
             return rate
         if method=='zc-FIRHP':
             yHP = signal.lfilter(self.posFilt[0],self.posFilt[1],xsRev)
+            self.ysOut.append(yHP[-1])
             from PyAstronomy import pyaC
             tsRev = []
             for i in range(0,lHist,1):
@@ -307,13 +309,13 @@ class MHDSystemA:
 
         if 1 == 0:
             self.ysOut= self.rZs
-
-        if len(self.ysOut)==len(self.xsOut):
-            plt.plot(self.xsOut,self.ysOut)
-        else:
-            #print('ysOut plot:')
-            plt.plot(self.ysOut)
-        #plt.show()
+        if len(self.ysOut)>0:
+            if len(self.ysOut)==len(self.xsOut):
+                plt.plot(self.xsOut,self.ysOut)
+            else:
+                #print('ysOut plot:')
+                plt.plot(self.ysOut)
+            plt.show()
 
 
 

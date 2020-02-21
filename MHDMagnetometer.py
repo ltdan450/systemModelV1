@@ -44,11 +44,12 @@ class MHDMagnetometer:
 
     def configure(self,bits=16,sensitivityLSBPerG=12000):
         #sensitivity of QMC5883L is 12000 LSB/G
-        bitsPerG = 12000
-        bitsPerT = bitsPerG * 10000
-        tPerBit = 1.0/bitsPerT
+        doNothing = 1
+        #bitsPerG = 12000
+        #bitsPerT = bitsPerG * 10000
+        #tPerBit = 1.0/bitsPerT
 
-        self.sensitivity = tPerBit
+        #self.sensitivity = tPerBit
     def configFilt(self):
         if 1 == 0:
             fs = 200

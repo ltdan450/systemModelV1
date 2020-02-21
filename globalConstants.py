@@ -1,4 +1,4 @@
-tests = [-4]
+tests = [-5]
 if 4 in tests or -4 in tests:
     a = 4 * .0254  # 0.048
     b = 6 * .0254  # 0.022

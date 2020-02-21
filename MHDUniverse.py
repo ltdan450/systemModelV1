@@ -118,6 +118,7 @@ class MHDUniverse:
                         rateErrors.append(abs(f-rate))
                         ampErrors.append(abs(amp - (2*mag)))
 
+
             t+=self.dt
         for system in self.systems:
             system.testEnd()
@@ -241,6 +242,72 @@ if -4 in tests:
 
 
     u.run()
+
+if -5 in tests:
+    u = MHDUniverse(.001, 30.0)
+
+    # setup magnets
+    a = 1.2     * .0254  # 0.048
+    b = 0.6     * .0254  # 0.022
+    h = 0.1875  * .0254  # 0.011
+    magCS = MHDCoordSys.MHDCoordSys(.0, .0, .3, .0, .0, .0, u.cs)
+    mag = MHDRectPM.MHDRectPM(magCS, a, b, h, 1.0)
+    mag.setJandKForBr(1.3)
+    u.addMagnet(mag)
+    u.mainMag = mag
+
+    # setup system
+    mgtrs = [[.0, .0, .0, 1]]#, [.05, .05, .0, 0], [-.05, -.05, .0, 0]]
+    csSys1 = MHDCoordSys.MHDCoordSys(.0, .0, .0, .0, 00.0, 0.0, u.cs)
+    sys1 = MHDSystem.MHDSystemA(csSys1, u)
+    sys1.magnet = mag
+    u.addSystem(sys1)
+
+    sys1.measInterval = 0.05
+
+    #system high pass filter
+    if 1 == 1:
+        bpmThresh = 20
+        fThresh = bpmThresh / 60.0
+        fHigh = 60. / 60.
+        fLow = 10. / 60.
+        ord = 3
+        fNyq = 0.5 * 1.0 / sys1.measInterval
+        print('fH:%s fL:%s nyq:%s' % (fThresh, fLow, fNyq))
+        #b, a = signal.butter(ord, [fThresh / fNyq], btype='highpass')
+        #b, a = signal.butter(ord, [fHigh/fNyq,fThresh / fNyq], btype='bandpass')
+        b, a = signal.butter(ord, [ fThresh / fNyq, fHigh / fNyq], btype='bandpass')
+        sys1.posFilt = [b, a]
+        sys1.filtType='FIR'
+
+    #system low pass filter
+    if 1 == 1:
+        bpmThresh = 45
+        fThresh = bpmThresh / 60.0
+        ord = 6
+        fNyq = 0.5 * 1.0 / sys1.measInterval
+        #print('fH:%s fL:%s nyq:%s' % (fThresh, fLow, fNyq))
+        b, a = signal.butter(ord, [fThresh / fNyq], btype='lowpass')
+        lowpassFilt = [b, a]
+        #sys1.filtType='FIR'
+
+
+    # setup magnetometers
+    paramset = [{'noiseTesla': 1.0e-22, 'sensitivityTesla': 1.0e-22},{'noiseTesla': 5.0e-7, 'sensitivityTesla': 1.0e-8}]
+    for mgtr in mgtrs:
+        mgtrCS = MHDCoordSys.MHDCoordSys(mgtr[0], mgtr[1], mgtr[2], 0, 0, 0, sys1.cs)
+        newMgtr = MHDMagnetometer.MHDMagnetometer(mgtrCS, sys1, paramset[mgtr[3]])
+        sys1.addMagnetometer(newMgtr)
+        newMgtr.a = a
+        newMgtr.b = b
+        if 1 == 1:
+            newMgtr.zX = signal.lfilter_zi(newMgtr.b, newMgtr.a)
+            newMgtr.zY = signal.lfilter_zi(newMgtr.b, newMgtr.a)
+            newMgtr.zZ = signal.lfilter_zi(newMgtr.b, newMgtr.a)
+
+
+    u.run()
+
 
 #just magnets and magnetometers
 if 1 == 0:
