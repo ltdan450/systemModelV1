@@ -78,6 +78,7 @@ class MHDSystemA:
             results = self.getBreathRate(rHist)
             #print('t:%s res:%s'%(t,results) )
             #self.ysOut.append(b[2])
+            #print('rMGTR:%s'%(Rmgtr_mgtrCS))
             return results
         else:
             return 0
