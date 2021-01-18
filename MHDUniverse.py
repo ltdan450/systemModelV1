@@ -1,5 +1,6 @@
 import MHDCoordSys
 import MHDRectPM
+import MHDMagAssby
 import MHDSystem
 import MHDMagnetometer
 import numpy
@@ -44,6 +45,7 @@ class MHDUniverse:
         self.magnets = []
         self.mainMag = 0
         self.rMagZero = [0.0,0.0,0.0]
+        self.magAssbys = []
 
 
     def addSystem(self,sys):
@@ -52,6 +54,8 @@ class MHDUniverse:
     def addMagnet(self,mag):
         self.magnets.append(mag)
 
+    def addMagAssby(self, magAssby):
+        self.magAssby = magAssby
 
     def getBFieldForMgtr(self,mgtr):
         #print('getBFieldForMgtr')
@@ -95,6 +99,30 @@ class MHDUniverse:
 
         return bMgtrSum
 
+    def getBFieldForA(self, a_sys, sys):
+        # do da thang
+        rotSys = R.from_euler(sys.cs.rot, [sys.cs.thetaX, sys.cs.thetaY, sys.cs.thetaZ], degrees=True)
+        rInvSys = rotSys.inv()
+        a_univ = rotSys.apply(a_sys)
+        e_univ = numpy.array([sys.cs.x, sys.cs.y, sys.cs.z], numpy.double)
+        c_univ = a_univ + e_univ
+        bSum = numpy.array([0.0, 0.0, 0.0], numpy.double)
+        for magAssby in self.magAssbys:
+            d_univ = numpy.array([magAssby.cs.x, magAssby.cs.y, magAssby.cs.z], numpy.double)
+            i_univ = c_univ - d_univ
+            rotMagAssby =  R.from_euler(magAssby.cs.rot, [magAssby.cs.thetaX, magAssby.cs.thetaY, magAssby.cs.thetaZ], degrees=True)
+            rInvMagAssby = rotMagAssby.inv()
+            i_magAssby = rInvMagAssby.apply(i_univ)
+            b_MagAssby = magAssby.getBForI(i_magAssby)
+            b_univ = rotMagAssby.apply(b_MagAssby)
+            b_sys = rInvSys.apply(b_univ)
+            bSum += b_sys
+        return bSum
+
+
+
+
+
     def run(self):
         t = 0
         rateErrors = []
@@ -131,7 +159,7 @@ class MHDUniverse:
 
 
 tests = c.tests
-tests = [-6]
+tests = [23]
 
 if 3 in tests:
     for i1 in range(0,1,1):
@@ -332,8 +360,8 @@ if -6 in tests:
         u = MHDUniverse(.001, 50.0)
 
         # setup magnets
-        a = 1.2     * .0254  # 0.048
-        b = 0.6     * .0254  # 0.022
+        a = 1.5     * .0254  # 0.048
+        b = 1.0     * .0254  # 0.022
         h = 0.1875  * .0254  # 0.011
 
         xIn = 9.4 * 0 + 1.*i
@@ -389,7 +417,7 @@ if -6 in tests:
 
 
         # setup magnetometers
-        paramset = [{'noiseTesla': 1.0e-22, 'sensitivityTesla': 1.0e-22},{'noiseTesla': 3.0e-7, 'sensitivityTesla': 1.0e-8},{'noiseTesla': 1.5e-8, 'sensitivityTesla': 1.3e-8}]
+        paramset = [{'noiseTesla': 1.0e-22, 'sensitivityTesla': 1.0e-22},{'noiseTesla': 3.0e-7, 'sensitivityTesla': 1.0e-8},{'noiseTesla': 3.8e-8, 'sensitivityTesla': 1.3e-8}]
         for mgtr in mgtrs:
             mgtrCS = MHDCoordSys.MHDCoordSys(mgtr[0], mgtr[1], mgtr[2], 0, 0, 0, sys1.cs)
             newMgtr = MHDMagnetometer.MHDMagnetometer(mgtrCS, sys1, paramset[mgtr[3]])

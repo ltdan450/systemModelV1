@@ -426,6 +426,33 @@ class MHDRectPM:
         self.j = jOld
         self.K = self.muZero * self.J / (4.0 * 3.1415926535)
 
+class MHDRectPMAssembly:
+    def __init__(self,csIn):
+        self.cs = csIn
+        self.magnets = []
+
+    def addMagnet(self,magIn):
+        self.magnets.append(magIn)
+
+    def getB(self,xyzIn):
+        #xyzIn will be in assby's CS, pointing to magnetometer.
+        #need to compute new vectors in mag's cs
+        #need to do:
+        magsum = numpy.array([0.0, 0.0, 0.0], numpy.double)
+
+        for m in self.magnets:
+            kAssem = [m.cs.x, m.cs.y, m.cs.z]
+
+            #need to draw diagram
+
+            #from univ B computation
+            #fmag computes bMag
+                #F is vector pointing from magnet to magnetometer
+                    #co
+
+
+
+
 #Test
 tests = [0]
 
