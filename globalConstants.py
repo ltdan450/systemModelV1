@@ -1,4 +1,19 @@
 tests = [-5]
+
+#Test for 4" x 6" x 0.5" ceramic magnet by Kingman, Netteburg, Show
+test_kingman_small = {}
+test_kingman_small['a'] = 6 * .0254
+test_kingman_small['b'] = 4 * .0254
+test_kingman_small['h'] =  0.5 * .0254
+test_kingman_small['xRm'] = 0.00
+test_kingman_small['yRm'] = 0.00
+test_kingman_small['zRm'] =-0.30
+test_kingman_small['tXRm'] = 0.0
+test_kingman_small['tYRm'] = 0.0
+test_kingman_small['tZRm'] = 0.0
+test_kingman_small['Br'] = 0.31
+
+
 if 4 in tests or -4 in tests:
     a = 4 * .0254  # 0.048
     b = 6 * .0254  # 0.022
@@ -29,4 +44,6 @@ if 4 in tests or -4 in tests:
     tX2 = 0.0
     tY2 = tYMin
     tZ2 = 0.0
+
+
 

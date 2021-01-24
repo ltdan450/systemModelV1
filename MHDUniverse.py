@@ -46,7 +46,7 @@ class MHDUniverse:
         self.mainMag = 0
         self.rMagZero = [0.0,0.0,0.0]
         self.magAssbys = []
-
+        self.verbose = 1
 
     def addSystem(self,sys):
         self.systems.append(sys)
@@ -55,7 +55,7 @@ class MHDUniverse:
         self.magnets.append(mag)
 
     def addMagAssby(self, magAssby):
-        self.magAssby = magAssby
+        self.magAssbys.append(magAssby)
 
     def getBFieldForMgtr(self,mgtr):
         #print('getBFieldForMgtr')
@@ -106,6 +106,9 @@ class MHDUniverse:
         a_univ = rotSys.apply(a_sys)
         e_univ = numpy.array([sys.cs.x, sys.cs.y, sys.cs.z], numpy.double)
         c_univ = a_univ + e_univ
+        if self.verbose:
+            print('a_sys:%s \n a_univ: %s \n e_univ: %s \n c_univ: %s' % (a_sys, a_univ, e_univ, c_univ))
+
         bSum = numpy.array([0.0, 0.0, 0.0], numpy.double)
         for magAssby in self.magAssbys:
             d_univ = numpy.array([magAssby.cs.x, magAssby.cs.y, magAssby.cs.z], numpy.double)
@@ -117,6 +120,10 @@ class MHDUniverse:
             b_univ = rotMagAssby.apply(b_MagAssby)
             b_sys = rInvSys.apply(b_univ)
             bSum += b_sys
+            if self.verbose:
+                print('d_univ:%s \n i_univ: %s \n i_magassby: %s \n b_magassby: %s' % (d_univ, i_univ, i_magAssby, b_MagAssby))
+
+
         return bSum
 
 
@@ -159,9 +166,288 @@ class MHDUniverse:
 
 
 tests = c.tests
-tests = [23]
+tests = [ 3]
+
+
+if 1 in tests:
+    # testing calculated magnetic fields vs measured ones obtain from:
+        # https://www.andrews.edu/cas/physics/research/research_files/coilmag01.pdf
+    cal_pts = {0.007:0.0341,0.016:0.0247,0.0258:0.0198,0.0359:0.0164,0.0459:0.0136,0.056:0.0111,0.0659:0.009,0.0759:0.0073,0.0858:0.006,0.096:0.0049,0.1059:0.004,0.1159:0.0033,0.1258:0.0028,0.1358:0.0023,0.1459:0.0019,0.1558:0.0016,0.1658:0.0015,0.1757:0.0013,0.1858:0.0011}
+
+    xs = []
+    bx_calcs = []
+    bx_meass = []
+    b_calcs = []
+    xs_sorted = sorted(cal_pts.keys())
+
+    for xcal in xs_sorted:
+        u = MHDUniverse(.001, 130.0)
+
+        xM = xcal
+        yM = 0.0
+        zM = 0.0
+        magAssbyCS = MHDCoordSys.MHDCoordSys(xM, yM, zM, 0.0, 0.0, 0.0, u.cs)
+        magAssby = MHDMagAssby.MHDMagAssby(magAssbyCS)
+        u.addMagAssby(magAssby)
+
+        magCS = MHDCoordSys.MHDCoordSys(0.0, 0.0, 0.0, 90.0, 000.0, 90.0, magAssbyCS)
+        a = c.test_kingman_small['a']
+        b = c.test_kingman_small['b']
+        h = c.test_kingman_small['h']
+        Br = c.test_kingman_small['Br']
+        mag = MHDRectPM.MHDRectPM(magCS, a, b, h, 1.0)
+        mag.setJandKForBr(Br)
+        magAssby.addMagnet(mag)
+
+        #mgtrs = [[.0, .0, .0, 1]]  # , [.05, .05, .0, 0], [-.05, -.05, .0, 0]]
+        csSys1 = MHDCoordSys.MHDCoordSys(.0, .0, .0, .0, 00.0, 0.0, u.cs)
+        sys1 = MHDSystem.MHDSystemB(csSys1, u)
+        #sys1.magnet = mag
+        u.addSystem(sys1)
+
+        a_sys = numpy.array([0.0, 0.0, 0.0], numpy.double)
+
+        bres = u.getBFieldForA(a_sys, sys1)
+        #print('bres:%s'%bres)
+        xs.append(xcal)
+        bx_meass.append(cal_pts[xcal])
+        b_calcs.append(bres)
+        bx_calcs.append(bres[0])
+
+
+    print('Comparing computed magnetic field to measured on p28 in coilmag01.pdf')
+    for i in range(0,len(xs)):
+        print('x:%s bxErrorPct:%s bxMeas:%s bxCalc:%s bCalc:%s'%(xs[i], round((bx_meass[i]-bx_calcs[i])/bx_meass[i]*100,2) ,bx_meass[i],bx_calcs[i],b_calcs[i]))
+    #sys1.measInterval = 0.1
+
+if 2 in tests:
+    # testing calculated magnetic fields vs measured ones obtain from:
+        # https://www.andrews.edu/cas/physics/research/research_files/coilmag01.pdf
+    cal_pts = {0.081:0.1222,0.0867:0.0424,0.0968:0.0191,0.1069:0.0111,0.117:0.0073,0.1269:0.0051,0.1369:0.0036,0.1469:0.0028,0.1569:0.0023,0.167:0.0017,0.1769:0.0015,0.1868:0.0011,0.1969:0.0009,0.207:0.0008,0.2169:0.0008,0.227:0.0006,0.2369:0.0006,0.247:0.0006,0.2569:0.0006}
+
+    ys = []
+    bx_calcs = []
+    bx_meass = []
+    b_calcs = []
+    ys_sorted = sorted(cal_pts.keys())
+
+    for ycal in ys_sorted:
+        u = MHDUniverse(.001, 130.0)
+
+        xM = 0.0
+        yM = ycal
+        zM = 0.0
+        magAssbyCS = MHDCoordSys.MHDCoordSys(xM, yM, zM, 0.0, 0.0, 0.0, u.cs)
+        magAssby = MHDMagAssby.MHDMagAssby(magAssbyCS)
+        u.addMagAssby(magAssby)
+
+        magCS = MHDCoordSys.MHDCoordSys(0.0, 0.0, 0.0, 90.0, 000.0, 90.0, magAssbyCS)
+        a = c.test_kingman_small['a']
+        b = c.test_kingman_small['b']
+        h = c.test_kingman_small['h']
+        Br = c.test_kingman_small['Br']
+        mag = MHDRectPM.MHDRectPM(magCS, a, b, h, 1.0)
+        mag.setJandKForBr(Br)
+        magAssby.addMagnet(mag)
+
+        #mgtrs = [[.0, .0, .0, 1]]  # , [.05, .05, .0, 0], [-.05, -.05, .0, 0]]
+        csSys1 = MHDCoordSys.MHDCoordSys(.0, .0, .0, .0, 00.0, 0.0, u.cs)
+        sys1 = MHDSystem.MHDSystemB(csSys1, u)
+        #sys1.magnet = mag
+        u.addSystem(sys1)
+
+        a_sys = numpy.array([0.0, 0.0, 0.0], numpy.double)
+
+        bres = u.getBFieldForA(a_sys, sys1)
+        #print('bres:%s'%bres)
+        ys.append(ycal)
+        bx_meass.append(-cal_pts[ycal])
+        b_calcs.append(bres)
+        bx_calcs.append(bres[0])
+
+
+    print('Comparing computed magnetic field to measured on p29 in coilmag01.pdf')
+    for i in range(0,len(ys)):
+        print('y:%s bxErrorPct:%s bxMeas:%s bxCalc:%s bCalc:%s'%(ys[i], round((bx_meass[i]-bx_calcs[i])/bx_meass[i]*100,2) ,bx_meass[i],bx_calcs[i],b_calcs[i]))
+    #sys1.measInterval = 0.1
 
 if 3 in tests:
+    # testing calculated magnetic fields vs measured ones obtain from:
+        # https://www.andrews.edu/cas/physics/research/research_files/coilmag01.pdf
+    cal_pts = {0.0549: 0.1277, 0.0608: 0.0403, 0.0709: 0.018, 0.081: 0.0102, 0.091: 0.0063, 0.1009: 0.0042,
+                 0.111: 0.0032, 0.1211: 0.0023, 0.1311: 0.0019, 0.1411: 0.0014, 0.1511: 0.0012, 0.1611: 0.0009,
+                 0.1711: 0.0009, 0.1811: 0.0007, 0.1912: 0.0005, 0.2012: 0.0005, 0.2112: 0.0004, 0.2212: 0.0005,
+                 0.2312: 0.0004}
+
+    zs = []
+    bx_calcs = []
+    bx_meass = []
+    b_calcs = []
+    zs_sorted = sorted(cal_pts.keys())
+
+    for zcal in zs_sorted:
+        u = MHDUniverse(.001, 130.0)
+
+        xM = 0.0
+        yM = 0.0
+        zM = zcal
+        magAssbyCS = MHDCoordSys.MHDCoordSys(xM, yM, zM, 0.0, 0.0, 0.0, u.cs)
+        magAssby = MHDMagAssby.MHDMagAssby(magAssbyCS)
+        u.addMagAssby(magAssby)
+
+        magCS = MHDCoordSys.MHDCoordSys(0.0, 0.0, 0.0, 90.0, 000.0, 90.0, magAssbyCS)
+        a = c.test_kingman_small['a']
+        b = c.test_kingman_small['b']
+        h = c.test_kingman_small['h']
+        Br = c.test_kingman_small['Br']
+        mag = MHDRectPM.MHDRectPM(magCS, a, b, h, 1.0)
+        mag.setJandKForBr(Br)
+        magAssby.addMagnet(mag)
+
+        #mgtrs = [[.0, .0, .0, 1]]  # , [.05, .05, .0, 0], [-.05, -.05, .0, 0]]
+        csSys1 = MHDCoordSys.MHDCoordSys(.0, .0, .0, .0, 00.0, 0.0, u.cs)
+        sys1 = MHDSystem.MHDSystemB(csSys1, u)
+        #sys1.magnet = mag
+        u.addSystem(sys1)
+
+        a_sys = numpy.array([0.0, 0.0, 0.0], numpy.double)
+
+        bres = u.getBFieldForA(a_sys, sys1)
+        #print('bres:%s'%bres)
+        zs.append(zcal)
+        bx_meass.append(-cal_pts[zcal])
+        b_calcs.append(bres)
+        bx_calcs.append(bres[0])
+
+
+    print('Comparing computed magnetic field to measured on p30 in coilmag01.pdf')
+    for i in range(0,len(zs)):
+        print('z:%s bxErrorPct:%s bxMeas:%s bxCalc:%s bCalc:%s'%(zs[i], round((bx_meass[i]-bx_calcs[i])/bx_meass[i]*100,2) ,bx_meass[i],bx_calcs[i],b_calcs[i]))
+    #sys1.measInterval = 0.1
+
+
+if 4 in tests:
+    # testing calculated magnetic fields vs measured ones obtain from:
+        # https://www.andrews.edu/cas/physics/research/research_files/coilmag01.pdf
+    cal_pts = {0.007:0.0341,0.016:0.0247,0.0258:0.0198,0.0359:0.0164,0.0459:0.0136,0.056:0.0111,0.0659:0.009,0.0759:0.0073,0.0858:0.006,0.096:0.0049,0.1059:0.004,0.1159:0.0033,0.1258:0.0028,0.1358:0.0023,0.1459:0.0019,0.1558:0.0016,0.1658:0.0015,0.1757:0.0013,0.1858:0.0011}
+
+    xs = []
+    bmagnitude_calcs = []
+    bx_meass = []
+    b_calcs = []
+    xs_sorted = sorted(cal_pts.keys())
+
+    for xcal in xs_sorted:
+        u = MHDUniverse(.001, 130.0)
+
+        a = xcal/math.sqrt(2.0)
+
+        xM = a
+        yM = a
+        zM = 0.0
+        magAssbyCS = MHDCoordSys.MHDCoordSys(xM, yM, zM, 0.0, 0.0, 45.0, u.cs)
+        magAssby = MHDMagAssby.MHDMagAssby(magAssbyCS)
+        u.addMagAssby(magAssby)
+
+        magCS = MHDCoordSys.MHDCoordSys(0.0, 0.0, 0.0, 90.0, 000.0, 90.0, magAssbyCS)
+        a = c.test_kingman_small['a']
+        b = c.test_kingman_small['b']
+        h = c.test_kingman_small['h']
+        Br = c.test_kingman_small['Br']
+        mag = MHDRectPM.MHDRectPM(magCS, a, b, h, 1.0)
+        mag.setJandKForBr(Br)
+        magAssby.addMagnet(mag)
+
+        #mgtrs = [[.0, .0, .0, 1]]  # , [.05, .05, .0, 0], [-.05, -.05, .0, 0]]
+        csSys1 = MHDCoordSys.MHDCoordSys(.0, .0, .0, .0, 00.0, 0.0, u.cs)
+        sys1 = MHDSystem.MHDSystemB(csSys1, u)
+        #sys1.magnet = mag
+        u.addSystem(sys1)
+
+        a_sys = numpy.array([0.0, 0.0, 0.0], numpy.double)
+
+        bres = u.getBFieldForA(a_sys, sys1)
+        #print('bres:%s'%bres)
+        xs.append(xcal)
+        bx_meass.append(cal_pts[xcal])
+        b_calcs.append(bres)
+        bmagnitude_calcs.append(math.sqrt(bres[0]*bres[0]+bres[1]*bres[1]+bres[2]*bres[2]))
+
+
+    print('Computing magnetic field for magnet rotated 45deg and moved 1/sqrt(2)*a in x and y'
+          '\n where a is the length along the z axis in shown on p28 in coilmag01.pdf'
+          '\n the magnitude of the magnetic field is compared with the measured z axis values on that page')
+    for i in range(0,len(xs)):
+        print('x:%s bxErrorPct:%s bxMeas:%s bmagCalc:%s bCalc:%s'%(xs[i], round((bx_meass[i]-bmagnitude_calcs[i])/bx_meass[i]*100,2) ,bx_meass[i],bmagnitude_calcs[i],b_calcs[i]))
+    #sys1.measInterval = 0.1
+
+if 5 in tests:
+    # testing calculated magnetic fields vs measured ones obtain from:
+        # https://www.andrews.edu/cas/physics/research/research_files/coilmag01.pdf
+    cal_pts = {0.007:0.0341,0.016:0.0247,0.0258:0.0198,0.0359:0.0164,0.0459:0.0136,0.056:0.0111,0.0659:0.009,0.0759:0.0073,0.0858:0.006,0.096:0.0049,0.1059:0.004,0.1159:0.0033,0.1258:0.0028,0.1358:0.0023,0.1459:0.0019,0.1558:0.0016,0.1658:0.0015,0.1757:0.0013,0.1858:0.0011}
+
+    xs = []
+    bx_calcs = []
+    bx_meass = []
+    b_calcs = []
+    xs_sorted = sorted(cal_pts.keys())
+
+    for xcal in xs_sorted:
+        # setup universe
+        u = MHDUniverse(.001, 130.0)
+
+        # setup mag assby
+        xM = xcal
+        yM = 0.0
+        zM = 0.0
+        magAssbyCS = MHDCoordSys.MHDCoordSys(xM, yM, zM, 0.0, 0.0, 0.0, u.cs)
+        magAssby = MHDMagAssby.MHDMagAssby(magAssbyCS)
+        u.addMagAssby(magAssby)
+        magCS = MHDCoordSys.MHDCoordSys(0.0, 0.0, 0.0, 90.0, 000.0, 90.0, magAssbyCS)
+        a = c.test_kingman_small['a']
+        b = c.test_kingman_small['b']
+        h = c.test_kingman_small['h']
+        Br = c.test_kingman_small['Br']
+        mag = MHDRectPM.MHDRectPM(magCS, a, b, h, 1.0)
+        mag.setJandKForBr(Br)
+        magAssby.addMagnet(mag)
+
+        #setup system
+        csSys1 = MHDCoordSys.MHDCoordSys(.0, .0, .0, .0, 00.0, 0.0, u.cs)
+        sys1 = MHDSystem.MHDSystemB(csSys1, u)
+        u.addSystem(sys1)
+        mgtr = MHDMagnetometer.MHDMagnetometer(MHDCoordSys.MHDCoordSys(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, sys1.cs))
+        sys1.addMagnetometer(mgtr)
+        #setup virtual magnet for system
+        vMagAssbyCS = MHDCoordSys.MHDCoordSys(xM, yM, zM, 0.0, 0.0, 0.0, u.cs)
+        vMagAssby = MHDMagAssby.MHDMagAssby(vMagAssbyCS)
+        vMagCS = MHDCoordSys.MHDCoordSys(0.0, 0.0, 0.0, 90.0, 000.0, 90.0, vMagAssbyCS)
+        vMag = MHDRectPM.MHDRectPM(vMagCS, a, b, h, 1.0)
+        vMag.setJandKForBr(Br)
+        vMagAssby.addMagnet(vMag)
+        sys1.addMagAssby(vMagAssby)
+
+        sys1.getPos()
+
+
+
+        if 1 == 0:
+            a_sys = numpy.array([0.0, 0.0, 0.0], numpy.double)
+            bres = u.getBFieldForA(a_sys, sys1)
+            #print('bres:%s'%bres)
+            xs.append(xcal)
+            bx_meass.append(cal_pts[xcal])
+            b_calcs.append(bres)
+            bx_calcs.append(bres[0])
+
+
+    print('Comparing computed magnetic field to measured on p28 in coilmag01.pdf')
+    for i in range(0,len(xs)):
+        print('x:%s bxErrorPct:%s bxMeas:%s bxCalc:%s bCalc:%s'%(xs[i], round((bx_meass[i]-bx_calcs[i])/bx_meass[i]*100,2) ,bx_meass[i],bx_calcs[i],b_calcs[i]))
+    #sys1.measInterval = 0.1
+
+
+if 33 in tests:
     for i1 in range(0,1,1):
         #setup universe
         u = MHDUniverse(.001,10)
@@ -210,7 +496,7 @@ if 3 in tests:
 
             u.run()
 
-if -4 in tests:
+if -44 in tests:
     u = MHDUniverse(.001, 30.0)
 
     # setup magnets

@@ -340,12 +340,15 @@ class MHDRectPM:
         0.18568840579710144, 0.0010977701543739282
         '''
 
+        x = 0.0
+        y = 0.0
+
         aOld = self.a
         bOld = self.b
         hOld = self.h
         jOld = self.J
-        self.a = 4*.0254#0.048
-        self.b = 6*.0254#0.022
+        self.a = 6*.0254#0.048
+        self.b = 4*.0254#0.022
         self.h = 0.5*.0254#0.011
 
         #test set J and K
@@ -370,14 +373,15 @@ class MHDRectPM:
         Br = 0.3
         bzCalcs1 = []
         bzCalcs2 = []
+
         for i in range(0,len(bZs),1):
-            x = zs[i]
+            z = zs[i]
             yReal = bZs[i]
-            yCalc1 = self.bZ_zAxis_alt(Br,x,self.a,self.b,self.h)
-            bzCalcs1.append(yCalc1)
-            yCalc2 = self.BzP(self.a/2,self.b/2,self.h/2+x)
-            bzCalcs2.append(yCalc2)
-            print('x:%s meas:%s calc1:%s calc2:%s'%(x,yReal,yCalc1,yCalc2))
+            zCalc1 = self.bZ_zAxis_alt(Br,z,self.a,self.b,self.h)
+            bzCalcs1.append(zCalc1)
+            zCalc2 = self.BzP(self.getXP(x,y,z), self.getYP(x,y,z), self.getZP(x,y,z))
+            bzCalcs2.append(zCalc2)
+            print('z:%s meas:%s calc1:%s calc2:%s errPct:%s'%(z,yReal,zCalc1,zCalc2,(yReal-zCalc2)/yReal*100))
 
         plt.clf()
         plt.figure(1)
@@ -388,43 +392,288 @@ class MHDRectPM:
 
         plt.legend()
         plt.show()
+        if 1 == 0:
+            print('position fix test')
+            posZCalcs = []
+            for i in range(0,len(bZs),1):
+                z = zs[i]
+                bX = 0
+                bY = 0
+                bZ = bZs[i]
 
-        print('position fix test')
-        posZCalcs = []
-        for i in range(0,len(bZs),1):
-            z = zs[i]
-            bX = 0
-            bY = 0
-            bZ = bZs[i]
+                xG = .4
+                yG = .2
+                zG = .4
+                self.x = xG
+                self.y = yG
+                self.z = zG
 
-            xG = .4
-            yG = .2
-            zG = .4
-            self.x = xG
-            self.y = yG
-            self.z = zG
+                posCalc = self.updatePosition(bX,bY,bZ,self.x,self.y,self.z)
+                print('z:%s  zCalc:%s  yCalc:%s   xCalc:%s'%(z, posCalc[2],posCalc[1],posCalc[0]))
+                posZCalcs.append(posCalc[2])
 
-            posCalc = self.updatePosition(bX,bY,bZ,self.x,self.y,self.z)
-            print('z:%s  zCalc:%s  yCalc:%s   xCalc:%s'%(z, posCalc[2],posCalc[1],posCalc[0]))
-            posZCalcs.append(posCalc[2])
 
+            plt.clf()
+            plt.figure(1)
+
+            #plt.plot(xs,yCalcs1,label='Calc1')
+            plt.plot(bZs,zs, label='z_exp')
+            plt.plot(bZs,posZCalcs, label='z_calc')
+            plt.xscale('log')
+            plt.legend()
+            plt.show()
+
+
+            self.a = aOld
+            self.b = bOld
+            self.h = hOld
+            self.j = jOld
+            self.K = self.muZero * self.J / (4.0 * 3.1415926535)
+
+    def validateBZ_xAxis(self):
+        import matplotlib.pyplot as plt
+
+        x_cal_pts = {0.081: 0.1222, 0.0867: 0.0424, 0.0968: 0.0191, 0.1069: 0.0111, 0.117: 0.0073, 0.1269: 0.0051,
+                   0.1369: 0.0036, 0.1469: 0.0028, 0.1569: 0.0023, 0.167: 0.0017, 0.1769: 0.0015, 0.1868: 0.0011,
+                   0.1969: 0.0009, 0.207: 0.0008, 0.2169: 0.0008, 0.227: 0.0006, 0.2369: 0.0006, 0.247: 0.0006,
+                   0.2569: 0.0006}
+        xs_sorted = sorted(x_cal_pts.keys())
+        z = 0
+        y = 0
+
+        aOld = self.a
+        bOld = self.b
+        hOld = self.h
+        jOld = self.J
+        self.a = 6*.0254#0.048
+        self.b = 4*.0254#0.022
+        self.h = 0.5*.0254#0.011
+
+        # test set J and K
+        self.setJandKForBr(0.31)
+        print('should be ~2.15E5')
+
+        # self.J = 2.15e5
+        # self.K = self.muZero * self.J / (4.0 * 3.1415926535)
+
+        xs = []
+        bZs = []
+
+        # mag params
+        Br = 0.3
+        bzCalcs1 = []
+        bzCalcs2 = []
+        for i in range(0, len(xs_sorted), 1):
+            x = xs_sorted[i]
+            xs.append(x)
+            yReal = -x_cal_pts[x]
+            bZs.append(yReal)
+            #yCalc1 = self.bZ_zAxis_alt(Br, x, self.a, self.b, self.h)
+            #bzCalcs1.append(yCalc1)
+            #y = x
+            #x = 0
+            bZCalc2 = self.BzP(self.getXP(x,y,z), self.getYP(x,y,z), self.getZP(x,y,z))
+            bzCalcs2.append(bZCalc2)
+            print('x:%s meas:%s calc2:%s errPct:%s' % (x, yReal, bZCalc2,(yReal-bZCalc2)/yReal*100))
 
         plt.clf()
         plt.figure(1)
+        plt.plot(xs, bZs, label='MeasBZ')
+        # plt.plot(xs,yCalcs1,label='Calc1')
+        #plt.plot(zs, bzCalcs1, label='Calc_analytic_BZ')
+        plt.plot(xs, bzCalcs2, label='Calc_Gou-et-al_BZ')
 
-        #plt.plot(xs,yCalcs1,label='Calc1')
-        plt.plot(bZs,zs, label='z_exp')
-        plt.plot(bZs,posZCalcs, label='z_calc')
-        plt.xscale('log')
         plt.legend()
         plt.show()
 
 
-        self.a = aOld
-        self.b = bOld
-        self.h = hOld
-        self.j = jOld
-        self.K = self.muZero * self.J / (4.0 * 3.1415926535)
+        if 1 == 0:
+            print('position fix test')
+            posZCalcs = []
+            for i in range(0, len(bZs), 1):
+                z = zs[i]
+                bX = 0
+                bY = 0
+                bZ = bZs[i]
+
+                xG = .4
+                yG = .2
+                zG = .4
+                self.x = xG
+                self.y = yG
+                self.z = zG
+
+                posCalc = self.updatePosition(bX, bY, bZ, self.x, self.y, self.z)
+                print('z:%s  zCalc:%s  yCalc:%s   xCalc:%s' % (z, posCalc[2], posCalc[1], posCalc[0]))
+                posZCalcs.append(posCalc[2])
+
+            plt.clf()
+            plt.figure(1)
+
+            # plt.plot(xs,yCalcs1,label='Calc1')
+            plt.plot(bZs, zs, label='z_exp')
+            plt.plot(bZs, posZCalcs, label='z_calc')
+            plt.xscale('log')
+            plt.legend()
+            plt.show()
+
+            self.a = aOld
+            self.b = bOld
+            self.h = hOld
+            self.j = jOld
+            self.K = self.muZero * self.J / (4.0 * 3.1415926535)
+
+    def validateBZ_yAxis(self):
+        import matplotlib.pyplot as plt
+
+        print('I dont trust the ycal data')
+        y_cal_pts = {0.0549:0.1277,0.0608:0.0403,0.0709:0.018,0.081:0.0102,0.091:0.0063,0.1009:0.0042,0.111:0.0032,0.1211:0.0023,0.1311:0.0019,0.1411:0.0014,0.1511:0.0012,0.1611:0.0009,0.1711:0.0009,0.1811:0.0007,0.1912:0.0005,0.2012:0.0005,0.2112:0.0004,0.2212:0.0005,0.2312:0.0004}
+
+        ys_sorted = sorted(y_cal_pts.keys())
+        z = 0
+        x = 0
+
+        aOld = self.a
+        bOld = self.b
+        hOld = self.h
+        jOld = self.J
+        self.a = 6*.0254#0.048
+        self.b = 4*.0254#0.022
+        self.h = 0.5*.0254#0.011
+
+        # test set J and K
+        self.setJandKForBr(0.31)
+        print('should be ~2.15E5')
+
+        # self.J = 2.15e5
+        # self.K = self.muZero * self.J / (4.0 * 3.1415926535)
+
+        ys = []
+        bZs = []
+
+        # mag params
+        Br = 0.3
+        bzCalcs1 = []
+        bzCalcs2 = []
+        for i in range(0, len(ys_sorted), 1):
+            y = ys_sorted[i]
+            ys.append(y)
+            yReal = -y_cal_pts[y]
+            bZs.append(yReal)
+            #yCalc1 = self.bZ_zAxis_alt(Br, x, self.a, self.b, self.h)
+            #bzCalcs1.append(yCalc1)
+            #x = y
+            #y = 0
+            bZCalc2 = self.BzP(self.getXP(x,y,z), self.getYP(x,y,z), self.getZP(x,y,z))
+            bzCalcs2.append(bZCalc2)
+            print('x:%s meas:%s calc2:%s errPct:%s' % (y, yReal, bZCalc2,(yReal-bZCalc2)/yReal*100))
+
+        plt.clf()
+        plt.figure(1)
+        plt.plot(ys, bZs, label='MeasBZ')
+        # plt.plot(xs,yCalcs1,label='Calc1')
+        #plt.plot(zs, bzCalcs1, label='Calc_analytic_BZ')
+        plt.plot(ys, bzCalcs2, label='Calc_Gou-et-al_BZ')
+
+        plt.legend()
+        plt.show()
+
+
+        if 1 == 0:
+            print('position fix test')
+            posZCalcs = []
+            for i in range(0, len(bZs), 1):
+                z = zs[i]
+                bX = 0
+                bY = 0
+                bZ = bZs[i]
+
+                xG = .4
+                yG = .2
+                zG = .4
+                self.x = xG
+                self.y = yG
+                self.z = zG
+
+                posCalc = self.updatePosition(bX, bY, bZ, self.x, self.y, self.z)
+                print('z:%s  zCalc:%s  yCalc:%s   xCalc:%s' % (z, posCalc[2], posCalc[1], posCalc[0]))
+                posZCalcs.append(posCalc[2])
+
+            plt.clf()
+            plt.figure(1)
+
+            # plt.plot(xs,yCalcs1,label='Calc1')
+            plt.plot(bZs, zs, label='z_exp')
+            plt.plot(bZs, posZCalcs, label='z_calc')
+            plt.xscale('log')
+            plt.legend()
+            plt.show()
+
+            self.a = aOld
+            self.b = bOld
+            self.h = hOld
+            self.j = jOld
+            self.K = self.muZero * self.J / (4.0 * 3.1415926535)
+
+
+    def plotAxis(self,a,b,h,xIn,yIn,zIn,axis,dp):
+        import matplotlib.pyplot as plt
+        x = xIn
+        y = yIn
+        z = zIn
+
+        vals=[]
+        for i in range (-100, 100):
+            vals.append(float(i)*dp/100.0)
+
+        self.a = a  # 0.048
+        self.b = b  # 0.022
+        self.h = h  # 0.011
+
+        # test set J and K
+        self.setJandKForBr(0.31)
+        print('should be ~2.15E5')
+
+        # self.J = 2.15e5
+        # self.K = self.muZero * self.J / (4.0 * 3.1415926535)
+
+        ys = []
+        bZs = []
+
+        # mag params
+        Br = 0.3
+
+        bXs = []
+        bYs = []
+        bZs = []
+
+        for val in vals:
+            if axis=='x':
+                x = val
+            elif axis=='y':
+                y = val
+            elif axis=='z':
+                z = val
+
+            xP = x + self.a / 2.0
+            yP = y + self.b / 2.0
+            zP = z + self.h / 2.0
+
+            bXs.append(self.BxP(xP, yP, zP))
+            bYs.append(self.ByP(xP, yP, zP))
+            bZs.append(self.BzP(xP, yP, zP))
+
+
+        #print('vals:%s bXs:%s'%(vals))
+        plt.clf()
+        plt.figure(1)
+        plt.plot(vals, bXs, label='MeasBX')
+        plt.plot(vals, bYs, label='MeasBY')
+        plt.plot(vals, bZs, label='MeasBZ')
+        plt.title(axis)
+
+        plt.legend()
+        plt.show()
 
 class MHDRectPMAssembly:
     def __init__(self,csIn):
@@ -454,7 +703,7 @@ class MHDRectPMAssembly:
 
 
 #Test
-tests = [0]
+tests = [22]
 
 if 1 in tests:
     #standard home depot magnet used
@@ -526,6 +775,12 @@ if 1 in tests:
 if 2 in tests:
     tMag2 = MHDRectPM(0,1,1,1,1)
     tMag2.validateBZ_zAxis()
+    tMag2.validateBZ_xAxis()
+    tMag2.validateBZ_yAxis()
+
+    tMag2.plotAxis(6 * .0254, 4 * .0254, 0.5 * .0254, 0, 0, 0, 'x', .2)
+    tMag2.plotAxis(6 * .0254, 4 * .0254, 0.5 * .0254, 0, 0, 0, 'y', .2)
+    tMag2.plotAxis(6 * .0254, 4 * .0254, 0.5 * .0254, 0, 0, 0, 'z', .2)
 
 
 

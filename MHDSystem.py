@@ -719,6 +719,10 @@ class MHDSystemB:
         self.universe = universe
         self.magnetometers=[]
         self.magnets = []
+        self.magAssbys = []
+
+        self.posComp = numpy.array([1.0,1.0,1.0],numpy.double)
+        self.orientationComp = numpy.array([0.0,0.0,0.0],numpy.double)
 
         self.mgtr1 = 0
         self.mgtr2 = 0
@@ -742,14 +746,16 @@ class MHDSystemB:
 
     def addMagnet(self, magnet):
         self.magnets.append(magnet)
+    def addMagAssby(self,magAssby):
+        self.magAssbys.append(magAssby)
 
 
 
     def addMagnetometer(self,mgtr):
         self.magnetometers.append(mgtr)
-        magEstimatedCS = MHDCoordSys.MHDCoordSys(.1,.1,.1,0,0,0,0)
-        mgtr.magnet = MHDRectPM.MHDRectPM(magEstimatedCS, self.magnet.a, self.magnet.b, self.magnet.h, self.magnet.J)
-        #mgtr.altCS = self.altCS
+
+        mgtr.positionComp = numpy.array([1.0, 1.0, 1.0], numpy.double)
+        mgtr.orientationComp = numpy.array([0.0, 0.0, 0.0], numpy.double)
 
         for mgtr1 in self.magnetometers:
             for mgtr2 in self.magnetometers:
@@ -762,6 +768,17 @@ class MHDSystemB:
                         self.mgtrPairs.append([mgtr1,mgtr2])
                         log('added pair %s and %s'%(mgtr1,mgtr2))
 
+    def getMgtrBMeasurement(self,mgtr):
+        a_Sys = numpy.array([mgtr.cs.x, mgtr.cs.y, mgtr.cs.z], numpy.double)
+        b_Sys = self.universe.getBFieldForA(a_Sys)
+        # do something with b_Sys
+        rotMgtr = R.from_euler(mgtr.cs.rot, [mgtr.cs.thetaX, mgtr.cs.thetaY, mgtr.cs.thetaZ], degrees=True)
+        rInvMgtr = rotMgtr.inv()
+        b_mgtr = rInvMgtr.apply(b_Sys)
+        return b_mgtr
+
+
+
     def step(self,t):
         if (t-self.tMeasLast)>self.measInterval:
             self.tMeasLast = t
@@ -769,14 +786,25 @@ class MHDSystemB:
             mgtrsSorted = self.getOrderedMgtrList()
             #mgtr, b = mgtrsSorted[mgtrsSorted.keys()[0]]
             for mgtr in self.magnetometers:
-                # take a "measurement"
+                b_mgtr = self.getMgtrBMeasurement(mgtr)
+                # now solve for R!
+                vMagAssby = self.magAssbys[0]
                 a_Sys = numpy.array([mgtr.cs.x, mgtr.cs.y, mgtr.cs.z], numpy.double)
-                b_Sys = self.universe.getBFieldForA(a_Sys)
-                # do something with b_Sys
+
+                #k_sys needs to be solved/updated
+                k_sys = self.posComp
+                i_sys = k_sys - a_Sys
+                rotMagAssby = R.from_euler(sys.cs.rot, [self.orientationComp[0], self.orientationComp[1], self.orientationComp[2]], degrees=True)
+                rInvMagAssby = rotMagAssby.inv()
+                i_magAssby = rInvMagAssby.apply(i_sys)
+                b_MagAssby = vMagAssby.getBForI(i_magAssby)
+                b_sys = rotMagAssby.apply(b_MagAssby)
                 rotMgtr = R.from_euler(mgtr.cs.rot, [mgtr.cs.thetaX, mgtr.cs.thetaY, mgtr.cs.thetaZ], degrees=True)
                 rInvMgtr = rotMgtr.inv()
-                b_mgtr = rInvMgtr.apply(b_Sys)
-                # now solve for R!
+                b_mgtr_calc = rInvMgtr.apply(b_sys)
+                err = b_mgtr - b_mgtr_calc
+                #maybe turn this into a funciton with inputs of k_sys, rotMagAssem, b_meas_mgtr???
+
 
 
 
@@ -784,6 +812,117 @@ class MHDSystemB:
             return results
         else:
             return 0
+
+    def updatePosition(self,b_mgtr,guessX,guessY,guessZ):
+        guessXP = self.getXP(guessX, guessY, guessZ)
+        guessYP = self.getYP(guessX, guessY, guessZ)
+        guessZP = self.getZP(guessX, guessY, guessZ)
+        posPrime = numpy.array([[guessXP], [guessYP], [guessZP]], numpy.double)
+
+        #Bx *= -1.0
+        #By *= -1.0
+
+
+        BxPG = self.BxP(guessXP, guessYP, guessZP)
+        ByPG = self.ByP(guessXP, guessYP, guessZP)
+        BzPG = self.BzP(guessXP, guessYP, guessZP)
+
+        log('xPG:%s yPG:%s zPG:%s'%(guessXP,guessYP,guessZP))
+
+        log('BxPG:%s ByPG:%s BzPG:%s'%(BxPG,ByPG,BzPG))
+        log('BxP:%s ByP:%s BzP:%s' % (Bx, By, Bz))
+
+        objFunction = numpy.array([[BxPG-Bx],[ByPG-By],[BzPG-Bz]],numpy.double)
+
+        BPErrorNorm = numpy.linalg.norm(objFunction)
+        log('BPErrorNorm:%s'%BPErrorNorm)
+
+        trialPos = 0
+        validPosFlag = 0
+        errorThreshold = 1e-9
+
+        log('begin nonlinear equation solve')
+
+        while (trialPos<=10000):
+            log('trialPos loop begin:%i'%trialPos)
+            iterations = 0
+            while iterations<100:
+                log('iterations loop begin:%i'%iterations)
+
+                # If pos > 4m away from sensor, guess new poss
+                if numpy.linalg.norm(posPrime)>4.0:
+                    guessXP = (random.random() - 0.5) * .20
+                    guessYP = (random.random() - 0.5) * .20
+                    guessZP = (random.random() - 0.0) * .20
+                    posPrime = numpy.array([[guessXP], [guessYP], [guessZP]], numpy.double)
+
+                log('posPrime: %s '%str(posPrime))
+
+                jac = self.getUpdatedJacobian(guessXP,guessYP,guessZP,.000001)
+                log('jacobian: %s'%str(jac))
+
+                invJac = numpy.linalg.inv(jac)
+                log('inverse jac: %s'%str(invJac))
+
+                delta = invJac.dot(objFunction)
+                log('delta: %s'%str(delta))
+
+                posPrime = numpy.subtract(posPrime,delta)
+                log('updatedPos:%s'%posPrime)
+
+                guessXP = posPrime[0,0]
+                guessYP = posPrime[1,0]
+                guessZP = posPrime[2,0]
+
+                if guessZP < 0.0:
+                    guessZP*=1.0
+
+                BxPG = self.BxP(guessXP, guessYP, guessZP)
+                ByPG = self.ByP(guessXP, guessYP, guessZP)
+                BzPG = self.BzP(guessXP, guessYP, guessZP)
+                log('BxPG:%s ByPG:%s BzPG:%s' % (BxPG, ByPG, BzPG))
+                log('BxP:%s ByP:%s BzP:%s' % (Bx, By, Bz))
+                objFunction = numpy.array([[BxPG - Bx], [ByPG - By], [BzPG - Bz]], numpy.double)
+                BPErrorNorm = numpy.linalg.norm(objFunction)
+                log('error norm:%f'%(BPErrorNorm))
+
+                x = posPrime[0, 0]
+                y = posPrime[1, 0]
+                z = posPrime[2, 0]
+
+                if (BPErrorNorm < errorThreshold):
+
+                    validPosFlag = 1
+                    break                                       #break iterations loop
+                iterations+=1
+            #proceed
+            log('validPosFlag:%i'%validPosFlag)
+            if self.getZ(guessXP, guessYP, guessZP)<0:
+                validPosFlag = 0
+            if validPosFlag == 1:
+                guessXP = posPrime[0,0]
+                guessYP = posPrime[1,0]
+                guessZP = posPrime[2,0]
+
+                self.x = self.getX(guessXP, guessYP, guessZP)
+                self.y = self.getY(guessXP, guessYP, guessZP)
+                self.z = self.getZ(guessXP, guessYP, guessZP)
+
+                self.posVect = numpy.array([[self.x],[self.y],[self.z]],numpy.double)
+                break                                           #break trialpos loop
+
+            else:
+                trialPos+=1
+                guessXP = (random.random() - 0.5) * .20
+                guessYP = (random.random() - 0.5) * .20
+                guessZP = (random.random() - 0.0) * .20
+
+                posPrime = numpy.array([[guessXP], [guessYP], [guessZP]], numpy.double)
+
+        if validPosFlag == 0:
+            log('ERROR: could not resolve positon')
+        else:
+            return [self.x,self.y,self.z]
 
 
 
